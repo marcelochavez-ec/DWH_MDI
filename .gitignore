@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.secreto_token.rds
+SHAPES/
+PYTHON/
+OE_HI/DB
+<<<<<<< HEAD
+POWER_BI/
+BDD/
+=======
+POWER_BI/
+>>>>>>> e994a1eeedcc7516534a9aa331380593e8c2fd80
