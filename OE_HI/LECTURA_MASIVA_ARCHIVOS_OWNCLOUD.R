@@ -20,51 +20,59 @@ postgres <- dbConnect(
     password = "marce"  # Contraseña de PostgreSQL
 )
 
-# Función para cargar varios archivos con manejo de errores
-cargar_archivos_homicidios <- function(url_base, fecha_inicio, fecha_fin) {
+cargar_archivos <- function(file_list) {
+    resultados <- list()  # Lista para almacenar los data frames procesados
     
-    # Generar secuencia de fechas desde el inicio hasta la fecha actual
-    fechas <- seq(ymd(fecha_inicio), ymd(fecha_fin), by = "day")
-    
-    # Generar los nombres de los archivos CSV con base en las fechas
-    archivos_csv <- map(fechas, function(fecha) {
-        glue("{url_base}MDI_DES_V1_HOMICIDIOS_INTENCIONALES_{format(fecha, '%Y%m%d')}_DEES.csv")
-    })
-    
-    # Leer los archivos CSV y agregar la columna fecha_carga
-    df_list <- map(archivos_csv, function(archivo_url) {
-        # Intentar leer el archivo con tryCatch
-        tryCatch({
-            # Leer el archivo sin mostrar el tipo de columnas
-            df <- read_delim(archivo_url, delim = ";", locale = locale(encoding = "latin1"), show_col_types = FALSE)
-            
-            # Extraer la fecha de carga desde el nombre del archivo
-            fecha_carga <- str_extract(archivo_url, "\\d{8}")
-            
-            # Agregar la columna fecha_carga al DataFrame
-            df <- df %>% mutate(fecha_carga = ymd(fecha_carga))
-            
-            # Retornar el data frame cargado
-            return(df)
-            
-        }, error = function(e) {
-            # En caso de error, imprimir un mensaje y continuar
-            message(glue("Archivo no encontrado o error al cargar: {archivo_url}"))
-            return(NULL)  # Retornar NULL para omitir este archivo en caso de error
+    for (i in seq_along(file_list$id)) {
+        file_id <- file_list$id[i]
+        nombre_archivo <- file_list$name[i]
+        
+        # Extraer identificador único del archivo (últimos 4 dígitos o nombre base)
+        tipo_coip <- str_extract(nombre_archivo, "\\d{4}$")
+        if (is.na(tipo_coip)) {
+            tipo_coip <- str_remove(nombre_archivo, "\\.xlsx$")
+        }
+        
+        # Descargar archivo temporalmente
+        temp_file <- tempfile(fileext = ".xlsx")
+        drive_download(as_id(file_id), path = temp_file, overwrite = TRUE)
+        
+        # Leer nombres de hojas
+        nombres_hojas <- openxlsx::getSheetNames(temp_file)
+        if (length(nombres_hojas) == 0) {
+            warning(paste("El archivo no contiene hojas accesibles:", nombre_archivo))
+            unlink(temp_file)
+            next
+        }
+        
+        # Filtrar hojas con nombres que contienen 4 dígitos
+        hojas_validas <- nombres_hojas[grepl("\\d{4}", nombres_hojas)]
+        if (length(hojas_validas) == 0) {
+            warning(paste("No se encontraron hojas válidas en el archivo:", nombre_archivo))
+            unlink(temp_file)
+            next
+        }
+        
+        # Combinar datos de hojas válidas en un solo data frame
+        df_combined <- map_dfr(hojas_validas, function(hoja) {
+            df <- openxlsx::read.xlsx(temp_file, sheet = hoja, colNames = TRUE)
+            df %>%
+                mutate(
+                    anio_coip = hoja,
+                    tipo_coip = tipo_coip
+                )
         })
-    })
+        
+        # Guardar el data frame en la lista con un nombre específico
+        nombre_df <- paste0("da_", tipo_coip)
+        resultados[[nombre_df]] <- df_combined
+        
+        # Eliminar archivo temporal
+        unlink(temp_file)
+    }
     
-    # Filtrar los elementos NULL que pudieron generarse por errores
-    df_list <- compact(df_list)
-    
-    # Retornar la lista de data frames
-    return(df_list)
+    return(resultados)  # Devolver la lista de data frames
 }
-
-# Parámetros para la función
-url_base <- "https://repositorio.ministeriodelinterior.gob.ec/owncloud/index.php/s/xYj3HBiRQ49ig00/download?path=%2F2.%20Uso%20(versiones%20anteriores)%2FHomicidios%20Intencionales&files="
-fecha_inicio <- "2024-07-17"
-fecha_fin <- Sys.Date()
 
 # Llamar a la función para cargar los archivos
 dataframes <- cargar_archivos_homicidios(url_base, fecha_inicio, fecha_fin)

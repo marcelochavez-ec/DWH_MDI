@@ -3,7 +3,6 @@ rm(list=ls(all.names = T))
 library(tidyverse)
 library(openxlsx)
 library(RPostgreSQL)
-<<<<<<< HEAD
 
 df_hi <- read.xlsx("C:/Users/marcelochavez/Documents/MDI/VISUALIZADOR/ARCHIVOS/DATA_LAKE_MDI/DB/HI/HI_2014_2024.xlsx",
                    detectDates = T,
